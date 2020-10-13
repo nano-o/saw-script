@@ -364,7 +364,12 @@ resolveSAWPred cc tm =
 
      w4val <- W4SC.w4SimulatorEval sym sc modmap mempty ref tm'
      case w4val of
-       Value.VBool x -> return x
+       Right (Value.VBool x) -> return x
+
+       Left nm ->
+         do putStrLn ("Evaluation blocked on: " ++ nm)
+            Crucible.bindSAWTerm sym W4.BaseBoolRepr tm'
+
        _ -> Crucible.bindSAWTerm sym W4.BaseBoolRepr tm'
 
 resolveSAWSymBV ::
@@ -383,7 +388,12 @@ resolveSAWSymBV cc w tm =
 
      w4val <- W4SC.w4SimulatorEval sym sc modmap mempty ref tm'
      case w4val of
-       Value.VWuord (W4SC.DBV x) | Just Refl <- testEquality w (W4.bvWidth x) -> return x
+       Right (Value.VWord (SW.DBV x)) | Just Refl <- testEquality w (W4.bvWidth x) -> return x
+
+       Left nm ->
+         do putStrLn ("Evaluation blocked on: " ++ nm)
+            Crucible.bindSAWTerm sym (W4.BaseBVRepr w) tm'
+
        _ -> Crucible.bindSAWTerm sym (W4.BaseBVRepr w) tm'
 
 resolveSAWTerm ::
