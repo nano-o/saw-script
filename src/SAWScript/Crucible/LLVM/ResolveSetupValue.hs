@@ -51,10 +51,9 @@ import           Data.Parameterized.NatRepr
 import qualified What4.BaseTypes    as W4
 import qualified What4.Interface    as W4
 import qualified What4.Expr.Builder as W4
+import qualified What4.SWord as SW
 
 import qualified Verifier.SAW.Simulator.What4 as W4SC
-import qualified Verifier.SAW.Simulator.What4.SWord as W4SC
-
 
 import qualified Lang.Crucible.LLVM.Bytes       as Crucible
 import qualified Lang.Crucible.LLVM.MemModel    as Crucible
@@ -66,6 +65,7 @@ import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
 import Verifier.SAW.Cryptol (importType, emptyEnv)
 import Verifier.SAW.TypedTerm
+import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.Simulator.Value as Value
 import Text.LLVM.DebugUtils as L
 
@@ -367,7 +367,7 @@ resolveSAWPred cc tm =
        Right (Value.VBool x) -> return x
 
        Left nm ->
-         do putStrLn ("Evaluation blocked on: " ++ nm)
+         do putStrLn ("Evaluation blocked on: " ++ show (toAbsoluteName nm))
             Crucible.bindSAWTerm sym W4.BaseBoolRepr tm'
 
        _ -> Crucible.bindSAWTerm sym W4.BaseBoolRepr tm'
@@ -391,7 +391,7 @@ resolveSAWSymBV cc w tm =
        Right (Value.VWord (SW.DBV x)) | Just Refl <- testEquality w (W4.bvWidth x) -> return x
 
        Left nm ->
-         do putStrLn ("Evaluation blocked on: " ++ nm)
+         do putStrLn ("Evaluation blocked on: " ++ show (toAbsoluteName nm))
             Crucible.bindSAWTerm sym (W4.BaseBVRepr w) tm'
 
        _ -> Crucible.bindSAWTerm sym (W4.BaseBVRepr w) tm'
