@@ -32,7 +32,7 @@ import Control.Monad
 import qualified Control.Monad.Fail as Fail
 import Control.Monad.State
 --import qualified Data.BitVector.Sized as BV
-import Data.Maybe (fromMaybe, listToMaybe, fromJust)
+import Data.Maybe (fromMaybe, listToMaybe, fromJust, isJust)
 import Data.IORef
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -44,6 +44,7 @@ import qualified Text.LLVM.AST as L
 import qualified Cryptol.Eval.Type as Cryptol (TValue(..), tValTy, evalValType)
 import qualified Cryptol.TypeCheck.AST as Cryptol (Schema(..))
 import qualified Cryptol.Utils.PP as Cryptol (pp)
+import qualified Cryptol.Utils.Ident as Cryptol
 
 import           Data.Parameterized.Some (Some(..))
 import           Data.Parameterized.NatRepr
@@ -63,7 +64,8 @@ import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as Crucible
 
 import Verifier.SAW.Rewriter
 import Verifier.SAW.SharedTerm
-import Verifier.SAW.Cryptol (importType, emptyEnv)
+import Verifier.SAW.Cryptol
+  (importType, emptyEnv, isCryptolModuleName, isCryptolInteractiveName)
 import Verifier.SAW.TypedTerm
 import Verifier.SAW.TypedAST
 import qualified Verifier.SAW.Simulator.Value as Value
@@ -362,7 +364,10 @@ resolveSAWPred cc tm =
      modmap <- scGetModuleMap sc
      let ref = cc^.ccUninterpCache
 
-     w4val <- W4SC.w4SimulatorEval sym sc modmap mempty ref tm'
+     -- unfold names defined in the cryptol prelude
+     let ecFilter ec = isJust $ isCryptolModuleName Cryptol.preludeName $ ecName ec
+
+     w4val <- W4SC.w4SimulatorEval sym sc modmap mempty ref ecFilter tm'
      case w4val of
        Right (Value.VBool x) -> return x
 
@@ -386,7 +391,13 @@ resolveSAWSymBV cc w tm =
      modmap <- scGetModuleMap sc
      let ref = cc^.ccUninterpCache
 
-     w4val <- W4SC.w4SimulatorEval sym sc modmap mempty ref tm'
+     -- unfold names defined in the cryptol prelude, or defined locally
+     -- with let statements.
+     let ecFilter ec =
+             (isJust $ isCryptolModuleName Cryptol.preludeName $ ecName ec) ||
+             (isJust $ isCryptolInteractiveName $ ecName ec)
+
+     w4val <- W4SC.w4SimulatorEval sym sc modmap mempty ref ecFilter tm'
      case w4val of
        Right (Value.VWord (SW.DBV x)) | Just Refl <- testEquality w (W4.bvWidth x) -> return x
 
