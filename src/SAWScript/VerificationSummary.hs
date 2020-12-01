@@ -1,4 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
+--{-# LANGUAGE ExistentialQuantification #-}
+--{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
+
 {- |
 Module      : SAWScript.VerificationSummary
 Description : Summaries of verification for human consumption.
@@ -8,15 +16,21 @@ Maintainer  : atomb
 
 module SAWScript.VerificationSummary
   ( computeVerificationSummary
+  , jsonVerificationSummary
   , prettyVerificationSummary
   ) where
 
-import Control.Lens
+import Control.Lens ((^.))
 import qualified Data.Set as Set
 import Data.String
 import Prettyprinter
+import qualified Text.PrettyPrint.ANSI.Leijen as Leijen (pretty)
+import Data.Aeson (encode, (.=), Value(..), object)
+import qualified Data.ByteString.Lazy.Char8 as B
+--import Data.ByteString.Lazy (ByteString)
 
 import qualified Lang.Crucible.JVM as CJ
+--import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
 import SAWScript.Crucible.Common.MethodSpec
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMSLLVM
@@ -24,7 +38,9 @@ import qualified SAWScript.Crucible.JVM.MethodSpecIR as CMSJVM
 import SAWScript.Proof
 import SAWScript.Prover.SolverStats
 import qualified Verifier.SAW.Term.Pretty as PP
+import What4.ProgramLoc (ProgramLoc(plSourceLoc))
 
+-- TODO if those were defined in their respective CrucibleMethodSpecIR, could we use non-orphan instance of ToJSON?
 type JVMTheorem =  CMS.CrucibleMethodSpecIR CJ.JVM
 type LLVMTheorem = CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR
 
@@ -50,6 +66,30 @@ vsAllSolvers vs = Set.union (vsVerifSolvers vs) (vsTheoremSolvers vs)
 
 computeVerificationSummary :: [JVMTheorem] -> [LLVMTheorem] -> [Theorem] -> VerificationSummary
 computeVerificationSummary = VerificationSummary
+
+msToJSON :: forall ext . Pretty (MethodId ext) => CMS.CrucibleMethodSpecIR ext -> Value
+msToJSON cms = object [
+    ("type" .= ("method" :: String)),
+      ("method" .= (show $ pretty (cms ^. csMethod))),
+        ("loc" .= (show $ (Leijen.pretty $ plSourceLoc (cms ^. csLoc)))), -- TODO: What4.ProgramLoc.Position is not an instance of Prettyprinter.Pretty
+          ("status", if Set.null (solverStatsSolvers (cms ^. csSolverStats)) then "assumed" else "verified"),
+            ("specification" .= ("unknown" :: String)) -- TODO
+  ]
+
+thmToJSON :: Theorem -> Value
+thmToJSON thm = object [
+  ("type" .= ("property" :: String)),
+  ("loc" .= ("unknown" :: String)), -- TODO: Theorem has no attached location information
+  ("status" .= (if Set.null (solverStatsSolvers (thmStats thm)) then "assumed" else "verified" :: String)),
+  ("term" .= (show $ (PP.ppTerm PP.defaultPPOpts (unProp (thmProp thm))))) ]
+
+jsonVerificationSummary :: VerificationSummary -> B.ByteString
+jsonVerificationSummary (VerificationSummary jspecs lspecs thms) =
+  encode vals where
+    vals = foldr (++) [] [jvals, lvals, thmvals]
+    jvals = map msToJSON jspecs
+    lvals = map (\(CMSLLVM.SomeLLVM ls) -> msToJSON ls) lspecs
+    thmvals = map thmToJSON thms
 
 prettyVerificationSummary :: VerificationSummary -> String
 prettyVerificationSummary vs@(VerificationSummary jspecs lspecs thms) =
