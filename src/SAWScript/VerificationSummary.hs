@@ -1,11 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
---{-# LANGUAGE ExistentialQuantification #-}
---{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
 
 {- |
 Module      : SAWScript.VerificationSummary
@@ -40,7 +36,6 @@ import SAWScript.Prover.SolverStats
 import qualified Verifier.SAW.Term.Pretty as PP
 import What4.ProgramLoc (ProgramLoc(plSourceLoc))
 
--- TODO if those were defined in their respective CrucibleMethodSpecIR, could we use non-orphan instance of ToJSON?
 type JVMTheorem =  CMS.CrucibleMethodSpecIR CJ.JVM
 type LLVMTheorem = CMSLLVM.SomeLLVM CMS.CrucibleMethodSpecIR
 
@@ -67,6 +62,7 @@ vsAllSolvers vs = Set.union (vsVerifSolvers vs) (vsTheoremSolvers vs)
 computeVerificationSummary :: [JVMTheorem] -> [LLVMTheorem] -> [Theorem] -> VerificationSummary
 computeVerificationSummary = VerificationSummary
 
+-- TODO: we could make things instances of the ToJSON typeclass instead of using the two methods below. But then we get orphaned instances because JVMTheorm and LLVMTheorem are defined above.
 msToJSON :: forall ext . Pretty (MethodId ext) => CMS.CrucibleMethodSpecIR ext -> Value
 msToJSON cms = object [
     ("type" .= ("method" :: String)),
@@ -80,7 +76,7 @@ thmToJSON :: Theorem -> Value
 thmToJSON thm = object [
   ("type" .= ("property" :: String)),
   ("loc" .= ("unknown" :: String)), -- TODO: Theorem has no attached location information
-  ("status" .= (if Set.null (solverStatsSolvers (thmStats thm)) then "assumed" else "verified" :: String)),
+  ("status" .= (if Set.null (solverStatsSolvers (thmStats thm)) then "assumed" else "verified" :: String)), -- TODO: add solver used?
   ("term" .= (show $ (PP.ppTerm PP.defaultPPOpts (unProp (thmProp thm))))) ]
 
 jsonVerificationSummary :: VerificationSummary -> B.ByteString
