@@ -36,7 +36,6 @@ import Data.Traversable hiding ( mapM )
 import qualified Control.Exception as X
 import Control.Monad (unless, (>=>))
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy.Char8 as LBS
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import qualified Data.Set as Set
@@ -361,7 +360,7 @@ writeVerificationSummary = do
        Nothing -> return ()
        Just f ->
          let f' = if hasDrive f then f else dir </> f
-          in io $ LBS.writeFile f' $ jsonVerificationSummary summary
+          in io $ BS.writeFile f' $ jsonVerificationSummary summary
 
 
 interpretFile :: FilePath -> TopLevel ()

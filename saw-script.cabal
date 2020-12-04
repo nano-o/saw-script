@@ -96,7 +96,8 @@ library
     , flexdis86
     , elf-edit
     , reflection
-    , aeson
+    --, aeson
+    , jsonifier
 
   hs-source-dirs: src
 
@@ -223,6 +224,7 @@ executable saw
     , saw-script
     , saw-core
     , cryptol-saw-core
+    , mtl >= 2.1
 
   if flag(builtin-abc)
     cpp-options: -DUSE_BUILTIN_ABC

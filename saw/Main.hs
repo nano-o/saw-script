@@ -11,7 +11,7 @@ module Main where
 import Control.Exception
 import Control.Monad
 import Data.Maybe
-import Data.List
+--import Data.List
 
 import System.IO
 import System.Console.GetOpt
@@ -29,6 +29,11 @@ import qualified Data.ABC.GIA as GIA
 #else
 import qualified Data.AIG as AIG
 #endif
+import Control.Monad.Reader
+
+-- TODO: check that a file format is given if summaryFile is given
+      --case (summaryFile opts', summaryFormat opts') of
+           --(Just f, Nothing) -> err opt' "Error: the '-s' option must be used in combination with the '-sf' option to specify an output format."
 
 main :: IO ()
 main = do
@@ -36,12 +41,12 @@ main = do
   argv <- getArgs
   case getOpt Permute options argv of
     (opts, files, []) -> do
-      let opts' = foldl' (flip id) defaultOptions opts
+      let optEnv = OptionsEnv { version = shortVersionText, headr = header }
+      opts' <- runReaderT (foldl (>>=) (return defaultOptions) opts) optEnv
       opts'' <- processEnv opts'
       {- We have two modes of operation: batch processing, handled in
       'SAWScript.ProcessFile', and a REPL, defined in 'SAWScript.REPL'. -}
       case files of
-        _ | showVersion opts'' -> hPutStrLn stderr shortVersionText
         _ | showHelp opts'' -> err opts'' (usageInfo header options)
         [] -> checkZ3 opts'' *> REPL.run opts''
         _ | runInteractively opts'' -> checkZ3 opts'' *> REPL.run opts''

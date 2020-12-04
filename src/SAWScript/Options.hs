@@ -15,8 +15,13 @@ import Data.Time
 import System.Console.GetOpt
 import System.Environment
 import System.FilePath
+import System.Exit
+import System.IO
 import Text.Read (readMaybe)
 import Text.Show.Functions ()
+import Control.Monad.Reader
+--import Control.Monad.IO.Class (liftIO)
+--import Control.Monad.Trans.Class (MonadTrans(lift))
 
 data Options = Options
   { importPath       :: [FilePath]
@@ -32,6 +37,7 @@ data Options = Options
   , useColor         :: Bool
   , printOutFn       :: Verbosity -> String -> IO ()
   , summaryFile      :: Maybe FilePath
+  , summaryFormat    :: Maybe SummaryFormat
   } deriving (Show)
 
 -- | Verbosity is currently a linear setting (vs a mask or tree).  Any given
@@ -45,6 +51,10 @@ data Verbosity
   | Debug
   | ExtraDebug
     deriving (Show,Eq,Ord)
+
+data SummaryFormat
+  = JSON | AdHoc
+  deriving (Show,Eq,Ord)
 
 defaultOptions :: Options
 defaultOptions
@@ -62,6 +72,7 @@ defaultOptions
     , showVersion = False
     , useColor = True
     , summaryFile = Nothing
+    , summaryFormat = Nothing
     }
 
 printOutWith :: Verbosity -> Verbosity -> String -> IO ()
@@ -74,66 +85,87 @@ printOutWith setting level msg
 printOutLn :: Options -> Verbosity -> String -> IO ()
 printOutLn o v s = printOutFn o v (s ++ "\n")
 
-options :: [OptDescr (Options -> Options)]
+data OptionsEnv = OptionsEnv
+  { version :: String
+  , headr :: String -- TODO: to avoid shadowing in Main.hs. Is this okay?
+  }
+
+options :: [OptDescr (Options -> ReaderT OptionsEnv IO Options)]
 options =
-  [ Option "h?" ["help"]
-    (NoArg (\opts -> opts { showHelp = True }))
+  [ Option "h?" ["help"] -- TODO: like version
+    (NoArg (\opts -> return opts { showHelp = True }))
     "Print this help message"
   , Option "V" ["version"]
-    (NoArg (\opts -> opts { showVersion = True }))
+    (NoArg (\_ -> do
+      ver <- version <$> ask
+      lift $ do
+        hPutStrLn stderr ver
+        exitWith ExitSuccess))
     "Show the version of the SAWScript interpreter"
   , Option "c" ["classpath"]
     (ReqArg
-     (\p opts -> opts { classPath = classPath opts ++ splitSearchPath p })
+     (\p opts -> return opts { classPath = classPath opts ++ splitSearchPath p })
      "path"
     )
     pathDesc
   , Option "i" ["import-path"]
     (ReqArg
-     (\p opts -> opts { importPath = importPath opts ++ splitSearchPath p })
+     (\p opts -> return opts { importPath = importPath opts ++ splitSearchPath p })
      "path"
     )
     pathDesc
   , Option "t" ["extra-type-checking"]
     (NoArg
-     (\opts -> opts { extraChecks = True }))
+     (\opts -> return opts { extraChecks = True }))
     "Perform extra type checking of intermediate values"
   , Option "I" ["interactive"]
     (NoArg
-     (\opts -> opts { runInteractively = True }))
+     (\opts -> return opts { runInteractively = True }))
     "Run interactively (with a REPL)"
   , Option "j" ["jars"]
     (ReqArg
-     (\p opts -> opts { jarList = jarList opts ++ splitSearchPath p })
+     (\p opts -> return opts { jarList = jarList opts ++ splitSearchPath p })
      "path"
     )
     pathDesc
   , Option [] ["output-locations"]
     (NoArg
-     (\opts -> opts { printShowPos = True }))
+     (\opts -> return opts { printShowPos = True }))
      "Show the source locations that are responsible for output."
   , Option "d" ["sim-verbose"]
     (ReqArg
-     (\v opts -> opts { simVerbose = read v })
+     (\v opts -> return opts { simVerbose = read v })
      "num"
     )
     "Set simulator verbosity level"
   , Option "v" ["verbose"]
     (ReqArg
      (\v opts -> let verb = readVerbosity v
-                 in opts { verbLevel = verb
+                 in return opts { verbLevel = verb
                          , printOutFn = printOutWith verb } )
      "<num 0-5 | 'silent' | 'counterexamples' | 'error' | 'warn' | 'info' | 'debug'>"
     )
     "Set verbosity level"
   , Option [] ["no-color"]
-    (NoArg (\opts -> opts { useColor = False }))
+    (NoArg (\opts -> return opts { useColor = False }))
     "Disable ANSI color and Unicode output"
   , Option "s" ["summary"]
     (ReqArg
-     (\file opts -> opts { summaryFile = Just file })
+     (\file opts -> return opts { summaryFile = Just file })
      "filename")
     "Write a verification summary to the provided filename"
+  , Option "sf" ["summary-format"]
+    (ReqArg
+     (\fmt opts -> case fmt of
+        "json" -> return opts { summaryFormat = Just JSON }
+        "adhoc" -> return opts { summaryFormat = Just AdHoc }
+        _ -> lift $ do
+            let msg = "Error: the '-sf' option must be either 'json' or 'adhoc'"
+            hPutStrLn stderr msg
+            exitFailure -- TODO: here I wanted to use exitProofUnknown but it's in Utils, which import Options...
+     )
+     "either 'json' or  'adhoc'")
+    "Specify the format in which the verification summary should be written"
   ]
 
 -- Try to read verbosity as either a string or number and default to 'Debug'.
