@@ -20,12 +20,10 @@ import Control.Lens ((^.))
 import qualified Data.Set as Set
 import Data.String
 import Prettyprinter
-import qualified Text.PrettyPrint.ANSI.Leijen as Leijen (pretty)
 import Jsonifier as J
 import qualified Data.ByteString.Char8 as Char8ByteString
 
 import qualified Lang.Crucible.JVM as CJ
---import qualified SAWScript.Crucible.LLVM.CrucibleLLVM as CL
 import SAWScript.Crucible.Common.MethodSpec
 import qualified SAWScript.Crucible.Common.MethodSpec as CMS
 import qualified SAWScript.Crucible.LLVM.MethodSpecIR as CMSLLVM
@@ -66,7 +64,7 @@ msToJSON :: forall ext . Pretty (MethodId ext) => CMS.CrucibleMethodSpecIR ext -
 msToJSON cms = J.object [
     ("type",  J.textString "method")
     , ("method", J.textString . fromString . show . pretty $ cms ^. csMethod)
-    , ("loc", J.textString . fromString . show . Leijen.pretty . plSourceLoc $ cms ^. csLoc) -- TODO: What4.ProgramLoc.Position is not an instance of Prettyprinter.Pretty
+    , ("loc", J.textString . fromString . show . pretty . plSourceLoc $ cms ^. csLoc)
     , ("status", J.textString $ if Set.null (solverStatsSolvers (cms ^. csSolverStats)) then "assumed" else "verified")
     , ("specification", J.textString "unknown") -- TODO
   ]
